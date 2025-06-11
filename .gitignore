@@ -1,0 +1,5 @@
+/data
+
+/airflow/logs
+/airflow/plugins
+/airflow/config
