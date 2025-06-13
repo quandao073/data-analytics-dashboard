@@ -54,10 +54,31 @@ def batch_processing_dag():
 
     time_params = get_or_create_time()
 
-    batch_processing = SparkSubmitOperator(
-        task_id="batch_processing",
+    extract_and_clean = SparkSubmitOperator(
+        task_id="extract_and_clean",
         application="/opt/airflow/code/extract.py",
         name="ExtractData",
+        application_args=[
+            "{{ ti.xcom_pull(task_ids='get_or_create_time')['year'] }}",
+            "{{ ti.xcom_pull(task_ids='get_or_create_time')['month'] }}"
+        ],
+        conn_id="spark_default",
+        verbose=True,
+        conf={
+            "spark.executor.memory": "1536m",
+            "spark.driver.memory": "1024m",
+            "spark.executor.cores": "3",
+            "spark.num.executors": "3",
+            "spark.sql.shuffle.partitions": "50",
+            "spark.default.parallelism": "9"
+        }
+    )
+
+    load_transform = SparkSubmitOperator(
+        task_id="load_transform",
+        application="/opt/airflow/code/load_transform.py",
+        name="LoadTransform",
+        packages="org.postgresql:postgresql:42.7.5",
         application_args=[
             "{{ ti.xcom_pull(task_ids='get_or_create_time')['year'] }}",
             "{{ ti.xcom_pull(task_ids='get_or_create_time')['month'] }}"
@@ -77,6 +98,6 @@ def batch_processing_dag():
 
     next_time = increase_time_var()
 
-    time_params >> batch_processing >> next_time
+    time_params >> extract_and_clean >> load_transform >> next_time
 
 batch_processing_dag = batch_processing_dag()

@@ -34,7 +34,7 @@ x-airflow-common:
     POSTGRES__URI: jdbc:postgresql://postgres-db:5432
     POSTGRES__USERNAME: quanda
     POSTGRES__PASSWORD: quanda
-    POSTGRES__DATABASE: dashboard-db
+    POSTGRES__DATABASE: ecommerce_analytics
 
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
@@ -191,7 +191,7 @@ services:
     environment:
       - POSTGRESQL_USERNAME=quanda
       - POSTGRESQL_PASSWORD=quanda
-      - POSTGRESQL_DATABASE=dashboard-db
+      - POSTGRESQL_DATABASE=ecommerce_analytics
     ports:
       - "5432:5432"
     volumes:
