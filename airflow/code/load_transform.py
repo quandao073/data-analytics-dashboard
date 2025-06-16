@@ -43,6 +43,20 @@ dim_date = df.select(
     date_format(col("date_id"), "EEEE").alias("day_name")
 ).distinct()
 
+dim_time = df.select(
+    hour(col("event_time")).alias("hour")
+).distinct()\
+.withColumn("hour_label", format_string("%02d:00", col("hour")))\
+.withColumn("is_morning", col("hour").between(6, 11))\
+.withColumn("is_afternoon", col("hour").between(12, 17))\
+.withColumn("is_evening", col("hour").between(18, 21))\
+.withColumn("is_night", (col("hour") >= 22) | (col("hour") <= 5))\
+.withColumn("hour_group", when(col("hour").between(6,11), "Morning")
+                         .when(col("hour").between(12,17), "Afternoon")
+                         .when(col("hour").between(18,21), "Evening")
+                         .otherwise("Night"))
+
+
 # dim_event_type
 dim_event_type = spark.createDataFrame([
     ("view", 1),
@@ -71,6 +85,7 @@ dim_category = df.select(
 # === FACT TABLE: fact_events ===
 fact_events = df.withColumn("event_id", monotonically_increasing_id())\
     .withColumn("date_id", to_date(col("event_time"))) \
+    .withColumn("hour", hour(col("event_time"))) \
     .withColumn("event_type_id",
                 when(col("event_type") == "view", 1)
                 .when(col("event_type") == "cart", 2)
@@ -78,7 +93,7 @@ fact_events = df.withColumn("event_id", monotonically_increasing_id())\
                 .otherwise(None)) \
     .withColumn("revenue", when(col("event_type") == "purchase", col("price")).otherwise(0)) \
     .withColumn("quantity", lit(1)) \
-    .select("event_id", "date_id", "user_id", "user_session", "product_id", "event_type_id", "revenue", "quantity")
+    .select("event_id", "date_id", "hour", "user_id", "user_session", "product_id", "event_type_id", "revenue", "quantity")
 
 # fact summary
 df_event_counts = df.groupBy("product_id", "event_type").count() \
@@ -111,6 +126,7 @@ def write_to_postgres(df, table_name, mode="overwrite"):
 
 # === WRITE ALL TABLES ===
 write_to_postgres(dim_date, "dim_date")
+write_to_postgres(dim_time, "dim_time")
 write_to_postgres(dim_category, "dim_category")
 write_to_postgres(dim_product, "dim_product")
 write_to_postgres(dim_event_type, "dim_event_type")
