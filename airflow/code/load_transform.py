@@ -1,5 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
+from pyspark.sql import Window
 import os
 import sys
 
@@ -51,10 +52,16 @@ dim_event_type = spark.createDataFrame([
 
 # dim_product
 dim_product = df.select(
-    "product_id", "brand", "price"
-).distinct().groupBy("product_id", "brand").agg(
-    max("price").alias("price")
+    "product_id", "category_id", "brand", "price"
+).distinct().groupBy("product_id", "category_id", "brand").agg(
+    round(avg("price"), 2).alias("price")
 ).distinct()
+
+window = Window.partitionBy("product_id", "category_id").orderBy("brand")
+dim_product = dim_product.withColumn("row_number", row_number().over(window)) \
+    .filter("row_number = 1")\
+    .drop("row_number")\
+    .distinct()
 
 # dim_category
 dim_category = df.select(
@@ -71,8 +78,27 @@ fact_events = df.withColumn("event_id", monotonically_increasing_id())\
                 .otherwise(None)) \
     .withColumn("revenue", when(col("event_type") == "purchase", col("price")).otherwise(0)) \
     .withColumn("quantity", lit(1)) \
-    .select("event_id", "date_id", "user_id", "user_session", "product_id", "category_id", "event_type_id", "revenue", "quantity")
+    .select("event_id", "date_id", "user_id", "user_session", "product_id", "event_type_id", "revenue", "quantity")
 
+# fact summary
+df_event_counts = df.groupBy("product_id", "event_type").count() \
+    .groupBy("product_id") \
+    .pivot("event_type", ["view", "cart", "purchase"]) \
+    .sum("count") \
+    .fillna(0)
+
+df_event_counts = df_event_counts.withColumn(
+    "total_events", col("view") + col("cart") + col("purchase")
+).withColumn(
+    "purchase_conversion", round((col("purchase") / (col("view") + col("cart"))) * 100, 2)
+)
+
+df_revenue = df.filter(col("event_type") == "purchase") \
+    .groupBy("product_id") \
+    .agg(sum("price").alias("total_revenue"))
+
+fact_summary = df_event_counts.join(df_revenue, on="product_id", how="left") \
+    .fillna({"total_revenue": 0})
 
 # === FUNCTION TO WRITE TO POSTGRES ===
 def write_to_postgres(df, table_name, mode="overwrite"):
@@ -89,5 +115,6 @@ write_to_postgres(dim_category, "dim_category")
 write_to_postgres(dim_product, "dim_product")
 write_to_postgres(dim_event_type, "dim_event_type")
 write_to_postgres(fact_events, "fact_events")
+write_to_postgres(fact_summary, "fact_summary")
 
 spark.stop()
