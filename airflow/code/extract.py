@@ -36,7 +36,8 @@ df_raw = spark.read.format("csv").option("header", "true").schema(schema).load(f
 
 
 df_filtered = df_raw.dropDuplicates() \
-    .dropna(subset=["event_time", "product_id", "category_id", "price", "user_id", "user_session", "brand", "category_code"])
+    .dropna(subset=["event_time", "product_id", "category_id", "price", "user_id", "user_session", "brand", "category_code"])\
+    .filter(month("event_time") == input_month)
 
 
 split_col = split(col("category_code"), "\\.")

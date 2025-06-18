@@ -1,6 +1,9 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql import Window
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+import calendar
 import os
 import sys
 
@@ -10,7 +13,6 @@ POSTGRES__USERNAME = os.environ.get("POSTGRES__USERNAME", "quanda")
 POSTGRES__PASSWORD = os.environ.get("POSTGRES__PASSWORD", "quanda")
 POSTGRES__DATABASE = os.environ.get("POSTGRES__DATABASE", "ecommerce_analytics")
 POSTGRES__URI = os.environ.get("POSTGRES__URI", "jdbc:postgresql://postgres-db:5432")
-POSTGRES_URL = f"{POSTGRES__URI}/{POSTGRES__DATABASE}"
 
 postgres_properties = {
     "user": POSTGRES__USERNAME,
@@ -115,10 +117,47 @@ df_revenue = df.filter(col("event_type") == "purchase") \
 fact_summary = df_event_counts.join(df_revenue, on="product_id", how="left") \
     .fillna({"total_revenue": 0})
 
+# === Predict Revenue for next month ===
+df_daily = fact_events.groupBy("date_id")\
+    .agg(sum("revenue").alias("total_revenue"))\
+    .withColumn("day_index", dayofmonth("date_id"))\
+    .withColumn("day_of_week", dayofweek("date_id"))\
+    .withColumn("is_weekend", col("day_of_week").isin(1, 7).cast("int"))
+
+
+# Huấn luyện Linear Regression
+feature_cols = ["day_index", "day_of_week", "is_weekend"]
+assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+df_features = assembler.transform(df_daily).select("features", "total_revenue")
+
+lr = LinearRegression(featuresCol="features", labelCol="total_revenue")
+model = lr.fit(df_features)
+
+next_month = input_month + 1 if input_month < 12 else 1
+next_year = input_year if input_month < 12 else input_year + 1
+days_in_next_month = calendar.monthrange(next_year, next_month)[1]
+
+# Tạo dataframe day_index cho tháng kế tiếp
+future_days = spark.range(1, days_in_next_month + 1).toDF("day_index")
+future_days = future_days.withColumn(
+    "forecast_date",
+    to_date(concat_ws("-", lit(next_year), lpad(lit(next_month), 2, "0"), lpad(col("day_index"), 2, "0")))
+)
+future_days = future_days.withColumn("day_of_week", dayofweek("forecast_date"))\
+    .withColumn("is_weekend", col("day_of_week").isin(1, 7).cast("int"))
+
+df_future = assembler.transform(future_days)
+predictions = model.transform(df_future)
+revenue_predictions = predictions.select(
+    "forecast_date", "day_of_week", "is_weekend", 
+    col("prediction").alias("predicted_revenue"),
+    col("day_index").alias("day")
+)
+
 # === FUNCTION TO WRITE TO POSTGRES ===
 def write_to_postgres(df, table_name, mode="overwrite"):
     try:
-        df.write.jdbc(url=POSTGRES_URL, table=table_name, mode=mode, properties=postgres_properties)
+        df.write.jdbc(url=f"{POSTGRES__URI}/{POSTGRES__DATABASE}", table=table_name, mode=mode, properties=postgres_properties)
         print(f"Wrote {df.count()} records to table: {table_name}")
     except Exception as e:
         print(f"Error writing {table_name}: {str(e)}")
@@ -132,5 +171,6 @@ write_to_postgres(dim_product, "dim_product")
 write_to_postgres(dim_event_type, "dim_event_type")
 write_to_postgres(fact_events, "fact_events")
 write_to_postgres(fact_summary, "fact_summary")
+write_to_postgres(revenue_predictions, "predicted_revenue")
 
 spark.stop()
