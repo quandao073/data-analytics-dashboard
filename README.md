@@ -1,7 +1,7 @@
 # Mini Project – Viettel Digital Talent 2025 – Data Engineering
 
 ## Overview
-### Project Title: E-commerce Data Analytics Dashboard
+### Project Title: Data Analytics Dashboard
 
 ### Description:
 This project aims to build a complete data analytics pipeline to analyze user behavior on an e-commerce platform. From raw transaction logs to insightful dashboards, the system automates data ingestion, processing, and visualization. Data is processed through an ETL pipeline using Apache Spark, stored in HDFS, automated by Airflow, and the results are loaded into PostgreSQL. Power BI is used to create interactive dashboards for business intelligence and decision-making.
