@@ -28,7 +28,7 @@ if len(sys.argv) < 3:
 input_year = int(sys.argv[1])
 input_month = int(sys.argv[2])
 
-spark = SparkSession.builder.appName("LoadTransform").getOrCreate()
+spark = SparkSession.builder.appName("TransformLoad").getOrCreate()
 
 # Read cleaned data from HDFS
 input_path = f"{HDFS_URI}/cleaned_data/year={input_year}/month={input_month}/"

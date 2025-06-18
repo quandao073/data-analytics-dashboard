@@ -74,9 +74,9 @@ def batch_processing_dag():
         }
     )
 
-    load_transform = SparkSubmitOperator(
-        task_id="load_transform",
-        application="/opt/airflow/code/load_transform.py",
+    transform_load = SparkSubmitOperator(
+        task_id="transform_load",
+        application="/opt/airflow/code/transform_load.py",
         name="LoadTransform",
         packages="org.postgresql:postgresql:42.7.5",
         application_args=[
@@ -98,6 +98,6 @@ def batch_processing_dag():
 
     next_time = increase_time_var()
 
-    time_params >> extract_and_clean >> load_transform >> next_time
+    time_params >> extract_and_clean >> transform_load >> next_time
 
 batch_processing_dag = batch_processing_dag()
