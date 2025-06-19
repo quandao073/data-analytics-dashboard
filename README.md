@@ -65,3 +65,6 @@ In Power BI Desktop:
 ![StarSchema](./images/star_schema.png)
 
 ![Dashboard](./images/dashboard.png)
+
+## Report
+For a more detailed explanation of the architecture, implementation, data pipeline, and results, please refer to the full report: [View Report](./report/DaoAnhQuan_MiniProject_Report.pdf)
